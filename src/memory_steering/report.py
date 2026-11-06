@@ -24,21 +24,17 @@ from memory_steering.scoring import load_episodes, score_run
 TEMPLATE = Path(__file__).with_name("report_template.html")
 
 
-def _text_of(content) -> str:
-    """Assistant text in a model call's logged content, for either provider."""
-    if isinstance(content, list):  # Anthropic blocks
-        return "\n".join(b.get("text", "") for b in content if b.get("type") == "text").strip()
-    if isinstance(content, dict):  # OpenAI message
-        return (content.get("content") or "").strip()
-    return ""
+def _text_of(items) -> str:
+    """Assistant text in a model call's logged output items."""
+    texts = []
+    for item in items or []:
+        if item.get("type") == "message":
+            texts += [c.get("text", "") for c in item.get("content") or [] if c.get("text")]
+    return "\n".join(texts).strip()
 
 
-def _has_tool_call(content) -> bool:
-    if isinstance(content, list):
-        return any(b.get("type") == "tool_use" for b in content)
-    if isinstance(content, dict):
-        return bool(content.get("tool_calls"))
-    return False
+def _has_tool_call(items) -> bool:
+    return any(item.get("type") == "function_call" for item in items or [])
 
 
 def compact_episode(episode: dict, memory: list[dict], prompts: dict[str, str]) -> dict:

@@ -17,9 +17,9 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 @dataclass(frozen=True)
 class Config:
-    # Model used for every agent (HR, attacker, Security, Approver).
-    # The provider follows from the name: "claude-..." is Anthropic, else OpenAI.
-    model: str = "claude-haiku-5-5"
+    # Model used for every agent (HR, attacker, Security, Approver), hosted on
+    # the Adaption Labs platform. Chosen by the rule in experiment-design.md.
+    model: str = "deepseek-v4-flash"
 
     # Scenario generation.
     # Attack-eligible scenarios run in all 12 conditions; honest controls only
@@ -46,13 +46,9 @@ class Config:
 CONFIG = Config()
 
 
-KEY_VARIABLES = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
-
-
-def api_key(provider: str) -> str:
-    """Return the provider's API key from the environment or .env, or fail clearly."""
-    variable = KEY_VARIABLES[provider]
-    key = os.environ.get(variable)
+def api_key() -> str:
+    """Return the Adaption API key from the environment or .env, or fail clearly."""
+    key = os.environ.get("ADAPTION_API_KEY")
     if not key:
-        raise RuntimeError(f"{variable} is not set. Copy .env.example to .env and add your key.")
+        raise RuntimeError("ADAPTION_API_KEY is not set. Copy .env.example to .env and add your key.")
     return key

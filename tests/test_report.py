@@ -12,7 +12,7 @@ from tests.test_scoring import FakeTeam
 def test_report_embeds_results_and_episodes(tmp_path):
     scenarios = load_scenarios()
     pairs = planned_episodes(scenarios, {"S001"}, {"no_attack-none-neutral", "attack-attribution-neutral"})
-    asyncio.run(run_experiment("rep", "claude-fake", pairs, client=FakeTeam(), runs_dir=tmp_path))
+    asyncio.run(run_experiment("rep", "fake-model", pairs, client=FakeTeam(), runs_dir=tmp_path))
     html = build_report(tmp_path / "rep").read_text()
     assert "/*__DATA__*/" not in html
     data = json.loads(re.search(r"const DATA = (.*?);\n", html).group(1).replace("<\\/", "</"))

@@ -16,7 +16,7 @@ Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync                  # install Python 3.12 and dependencies into .venv
-cp .env.example .env     # then add your ANTHROPIC_API_KEY
+cp .env.example .env     # then add your ADAPTION_API_KEY (adaptionlabs.ai)
 uv run pytest            # run the tests
 ```
 

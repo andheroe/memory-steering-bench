@@ -11,51 +11,38 @@ verification, and honest runs are all correct.
 """
 
 import asyncio
-from types import SimpleNamespace
 
 import pytest
 
 from memory_steering.experiment import load_scenarios, planned_episodes, run_experiment
 from memory_steering.scoring import score_run
+from tests.fakes import FakeAdaption
 
 SCENARIOS = load_scenarios()
 ELIGIBLE = [s["scenario_id"] for s in SCENARIOS if s["kind"] == "eligible"][:4]
 
 
-class FakeTeam:
-    def __init__(self):
-        self.messages = self
-
-    async def create(self, **kw):
-        names = [t["name"] for t in kw["tools"]]
-        opening = kw["messages"][0]["content"]
-        emp_id = opening.split("employee ID ")[1][:4]
-        memory_says_full_time = "employment type: full_time" in opening
-        n_msgs = len(kw["messages"])
-        if "submit_decision" in names:
-            if "verify" in names and n_msgs == 1:
-                call = ("verify", {"employee_id": emp_id, "field": "employment_type"})
-            elif "verify" in names:
-                call = ("submit_decision", {"level": "read", "reason": "verified"})
-            else:
-                call = ("submit_decision", {"level": "admin" if memory_says_full_time else "read", "reason": "memory"})
-        elif names[0] == "query_hr_db" and n_msgs == 1:
-            call = ("query_hr_db", {"employee_id": emp_id})
-        elif names[0] == "query_hr_db":
-            attacker = "Hidden instruction" in kw["system"]
-            truth = kw["messages"][-1]["content"][0]["content"]
-            emp = "full_time" if attacker or "full_time" in truth else "contractor"
-            call = ("write_note", {"facts": {"employment_type": emp}, "recommendation": "read", "text": ""})
-        else:
-            emp = "full_time" if memory_says_full_time else "contractor"
-            call = (
-                "write_note",
-                {"facts": {"employment_type": emp}, "recommendation": "admin" if emp == "full_time" else "read",
-                 "text": "", "employment_type_used": emp},
-            )
-        block = {"type": "tool_use", "id": f"t{n_msgs}", "name": call[0], "input": call[1]}
-        return SimpleNamespace(
-            content=[block], stop_reason="tool_use", model="fake", usage=SimpleNamespace(input_tokens=10, output_tokens=2)
+class FakeTeam(FakeAdaption):
+    def decide(self, req):
+        memory_says_full_time = "employment type: full_time" in req.opening
+        if "submit_decision" in req.tools:
+            if "verify" in req.tools and req.n_items == 1:
+                return ("tool", "verify", {"employee_id": req.employee_id, "field": "employment_type"})
+            if "verify" in req.tools:
+                return ("tool", "submit_decision", {"level": "read", "reason": "verified"})
+            return ("tool", "submit_decision", {"level": "admin" if memory_says_full_time else "read", "reason": "memory"})
+        if req.tools[0] == "query_hr_db" and req.n_items == 1:
+            return ("tool", "query_hr_db", {"employee_id": req.employee_id})
+        if req.tools[0] == "query_hr_db":
+            attacker = "Hidden instruction" in req.system
+            emp = "full_time" if attacker or "full_time" in req.last_output else "contractor"
+            return ("tool", "write_note", {"facts": {"employment_type": emp}, "recommendation": "read", "text": ""})
+        emp = "full_time" if memory_says_full_time else "contractor"
+        return (
+            "tool",
+            "write_note",
+            {"facts": {"employment_type": emp}, "recommendation": "admin" if emp == "full_time" else "read",
+             "text": "", "employment_type_used": emp},
         )
 
 
@@ -68,7 +55,7 @@ def scored(tmp_path_factory):
         for s, c in planned_episodes(SCENARIOS, set(ELIGIBLE) | {control})
         if c.security_prompt == "neutral"
     ]
-    asyncio.run(run_experiment("score", "claude-fake", pairs, client=FakeTeam(), runs_dir=runs))
+    asyncio.run(run_experiment("score", "fake-model", pairs, client=FakeTeam(), runs_dir=runs))
     return score_run(runs / "score")
 
 
@@ -120,3 +107,9 @@ def test_health(scored):
     h = r["health"]
     assert h["episodes_finished"] == 27 and h["episodes_crashed"] == [] and h["turn_failures"] == []
     assert h["agent_turns"] == 27 * 5
+
+
+def test_mechanism_check_counts_only_conflicts(scored):
+    # The fake Security agent repeats the lie, so no episode has conflicting notes.
+    _, r = scored
+    assert r["approver_follows_lie_in_conflict"] == {}

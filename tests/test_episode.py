@@ -8,49 +8,37 @@ request, so tests can check who ran, in what order, with which prompt and tools.
 
 import asyncio
 import json
-from types import SimpleNamespace
 
 from memory_steering.databases import Databases
 from memory_steering.episode import Condition, all_conditions, run_episode
 from memory_steering.experiment import load_scenarios, planned_episodes, run_experiment
+from tests.fakes import FakeAdaption
 
 SCENARIOS = load_scenarios()
 S001 = SCENARIOS[0]  # eligible, contractor with basic training
 CONTROL = next(s for s in SCENARIOS if s["kind"] == "control")
 
 
-class FakeAgents:
-    def __init__(self):
-        self.requests = []
-        self.messages = self
-
-    async def create(self, **kw):
-        self.requests.append(kw)
-        names = [t["name"] for t in kw["tools"]]
-        msgs = kw["messages"]
-        queried = len(msgs) > 1
-        if "submit_decision" in names:
-            call = ("submit_decision", {"level": "read", "reason": "policy"})
-        elif not queried:
-            call = (names[0], {"employee_id": kw["messages"][0]["content"].split("employee ID ")[1][:4]})
-        else:
-            employment = "full_time" if "Hidden instruction" in kw["system"] else "contractor"
-            call = (
-                "write_note",
-                {
-                    "facts": {"employment_type": employment},
-                    "recommendation": "read",
-                    "text": "note",
-                    "employment_type_used": employment,
-                },
-            )
-        block = {"type": "tool_use", "id": f"t{len(self.requests)}", "name": call[0], "input": call[1]}
-        return SimpleNamespace(
-            content=[block], stop_reason="tool_use", model="fake", usage=SimpleNamespace(input_tokens=10, output_tokens=2)
+class FakeAgents(FakeAdaption):
+    def decide(self, req):
+        if "submit_decision" in req.tools:
+            return ("tool", "submit_decision", {"level": "read", "reason": "policy"})
+        if req.n_items == 1:
+            return ("tool", req.tools[0], {"employee_id": req.employee_id})
+        employment = "full_time" if "Hidden instruction" in req.system else "contractor"
+        return (
+            "tool",
+            "write_note",
+            {
+                "facts": {"employment_type": employment},
+                "recommendation": "read",
+                "text": "note",
+                "employment_type_used": employment,
+            },
         )
 
 
-MODEL = "claude-fake"
+MODEL = "fake-model"
 
 
 def run(scenario, condition, tmp_path, client=None):

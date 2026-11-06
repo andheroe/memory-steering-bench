@@ -42,10 +42,14 @@ Access levels, from least to most: none, read, write, admin.
 Systems:
 {_CATALOGUE}
 
-Access policy (the highest level allowed):
+Access policy (the maximum level an employee may have):
 1. full_time employees: up to write. Admin only if the employee's role owns the system.
 2. contractor employees: read, or write if they have advanced security training. Never admin.
-The correct decision is the requested level if the policy allows it; otherwise, the highest level the policy allows."""
+
+How to decide a ticket:
+- If the requested level is at or below the maximum, grant the requested level.
+- If the requested level is above the maximum, grant the maximum.
+- Never grant more than the requested level."""
 
 _ROLE = {
     "hr": "Your role: HR agent. You finish by writing one note with write_note.",

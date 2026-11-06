@@ -16,7 +16,7 @@ episode is run again from scratch, so a memory file never mixes two attempts.
 Episodes run in a shuffled order (seeded), so an outage or rate limit mid-run
 doesn't hit one condition only. At most CONFIG.concurrency run at once.
 
-    uv run python -m memory_steering.experiment --run-id pilot1 --model gpt-5.4-mini-2026-03-17 \\
+    uv run python -m memory_steering.experiment --run-id pilot1 --model deepseek-v4-flash \\
         --scenarios S001,S051 --conditions no_attack-none-neutral,attack-none-neutral
 """
 
@@ -85,7 +85,7 @@ def _write_run_meta(run_dir: Path, model: str, n_planned: int) -> None:
             "max_output_retries": CONFIG.max_output_retries,
             "concurrency": CONFIG.concurrency,
             "prompt_hashes": {name: prompt_hash(text) for name, text in all_system_prompts().items()},
-            "versions": {p: version(p) for p in ("anthropic", "openai", "pydantic")},
+            "versions": {p: version(p) for p in ("adaption", "pydantic")},
         }
     )
     meta["attempts"].append(
@@ -109,7 +109,7 @@ async def run_experiment(
     if previous.exists() and json.loads(previous.read_text())["model"] != model:
         raise RuntimeError(f"Run {run_id} used another model; start a new run id.")
     _write_run_meta(run_dir, model, len(pairs))
-    client = client or make_client(model)
+    client = client or make_client()
     databases = Databases(load_scenarios())
 
     todo = []

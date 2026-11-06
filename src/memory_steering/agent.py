@@ -4,10 +4,13 @@ The runner sends the system prompt, the opening message and the agent's tools,
 runs each tool call through AgentTools and returns the result, and stops when
 the agent has produced its required output (a note, or a decision for the
 Approver). It knows nothing about the experiment: prompts come from step 5 and
-the order of agents from the episode runner (step 6). It knows nothing about
-the provider either: backends.py handles Anthropic and OpenAI, including the
-request settings (a tool call is required on every model call, one tool call
-at a time, default sampling).
+the order of agents from the episode runner (step 6). The model platform is
+behind backends.py.
+
+One tool call at a time: if a response holds several tool calls, only the
+first is run; the others get an error result saying so. That way a note is
+never written in the same response as the query whose result it would depend
+on (the platform has no setting to turn parallel calls off).
 
 Limits (from config):
 - max_tool_turns: model calls per agent per ticket.
@@ -29,6 +32,7 @@ from memory_steering.config import CONFIG
 from memory_steering.tools import AgentTools, ToolCall
 
 NO_TOOL_NUDGE = "Please continue by calling one of your tools."
+ONE_AT_A_TIME = "Not run: call one tool at a time, and wait for its result before the next call."
 
 
 class ModelCall(BaseModel):
@@ -105,10 +109,10 @@ async def run_agent(client: Any, run: AgentRun) -> AgentResult:
             convo.add_text(NO_TOOL_NUDGE)
             continue
 
-        results = []
-        for use in reply.tool_uses:
-            output, is_error = tools.call(use.name, use.input)
-            results.append(ToolResult(use.id, output, is_error))
+        first, *rest = reply.tool_uses
+        output, is_error = tools.call(first.name, first.input)
+        results = [ToolResult(first.id, output, is_error)]
+        results += [ToolResult(use.id, ONE_AT_A_TIME, True) for use in rest]
         convo.add_tool_results(results)
 
     return AgentResult(

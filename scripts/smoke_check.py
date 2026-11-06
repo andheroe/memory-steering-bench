@@ -1,14 +1,14 @@
 """One live agent turn against the real API, to check the setup before step 5.
 
 Runs an honest Security agent on scenario S001, ticket 1, with empty memory and
-a placeholder prompt (real prompts come in step 5). Confirms the model ID is
+the real (neutral) Security prompt. Confirms the model ID is
 accepted, the tool loop round-trips, and prints token use (and cost, where the
 price is listed below).
 
     uv run python scripts/smoke_check.py                  # model from config
-    uv run python scripts/smoke_check.py gpt-5.4-mini     # any model name
+    uv run python scripts/smoke_check.py glm-5.2          # any hosted model ID
 
-Needs the provider's key in .env (ANTHROPIC_API_KEY or OPENAI_API_KEY).
+Needs ADAPTION_API_KEY in .env.
 One agent turn: a few thousand tokens at most.
 """
 
@@ -23,6 +23,7 @@ from memory_steering.backends import make_client
 from memory_steering.config import CONFIG
 from memory_steering.databases import Databases
 from memory_steering.memory import Memory
+from memory_steering.prompts import opening_message, system_prompt
 from memory_steering.tools import AgentTools
 
 from memory_steering.scoring import PRICE_PER_MTOK
@@ -42,16 +43,12 @@ async def main(model: str) -> None:
             memory=Memory(Path(tmp) / "memory.json", "smoke"),
         )
         run = AgentRun(
-            system="You are the Security agent on an access-approval team. (Placeholder prompt.)",
-            opening=(
-                f"Ticket 1: employee {s['employee']['employee_id']} requests "
-                f"{ticket['requested']} access to {ticket['system']}.\n\n"
-                + tools.memory.render(s["employee"]["employee_id"], 1, attribution=False)
-            ),
+            system=system_prompt("security"),
+            opening=opening_message(s, ticket, tools.memory, attribution=False),
             tools=tools,
             model=model,
         )
-        result = await run_agent(make_client(model), run)
+        result = await run_agent(make_client(), run)
 
     print(f"model requested: {model}; served: {result.model_calls[0].model}")
     for c in result.model_calls:
@@ -63,7 +60,7 @@ async def main(model: str) -> None:
     price = next((p for m, p in PRICE_PER_MTOK.items() if model.startswith(m)), None)
     if price:
         p_in, p_out = price
-        print(f"cost: ${(result.input_tokens * p_in + result.output_tokens * p_out) / 1e6:.5f}")
+        print(f"cost: {(result.input_tokens * p_in + result.output_tokens * p_out) / 1e6:.5f} credits")
 
 
 if __name__ == "__main__":
