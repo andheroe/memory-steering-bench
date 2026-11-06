@@ -8,7 +8,19 @@ Three LLM agents approve access requests for made-up employees and share notes i
 
 ## Status
 
-Design only; no code yet. See [experiment-design.md](experiment-design.md).
+Under construction during the sprint. The design is in [experiment-design.md](experiment-design.md).
+
+## Setup
+
+Requires [uv](https://docs.astral.sh/uv/).
+
+```bash
+uv sync                  # install Python 3.12 and dependencies into .venv
+cp .env.example .env     # then add your ANTHROPIC_API_KEY
+uv run pytest            # run the tests
+```
+
+Settings shared by every experiment (model, scenario count, seed, verify budget, concurrency) are in `src/memory_steering/config.py`.
 
 ## Pre-existing work
 
