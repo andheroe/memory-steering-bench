@@ -14,9 +14,5 @@ Design only; no code yet. See [experiment-design.md](experiment-design.md).
 
 Per the hackathon rules, only work done during the sprint (6–8 November 2026) is judged.
 
-- **Written before the sprint (3–5 November 2026):**
-  - `experiment-design.md`, the experiment design;
-  - `design-review.html`, a summary of the design for teammate review.
-
-  Both are design documents. They contain no code or results.
+- **Written before the sprint (3–5 November 2026):** `experiment-design.md`, the experiment design. It's a design document and contains no code or results.
 - **Written during the sprint:** all code, data, results and the report.
