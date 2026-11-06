@@ -18,6 +18,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 @dataclass(frozen=True)
 class Config:
     # Model used for every agent (HR, attacker, Security, Approver).
+    # The provider follows from the name: "claude-..." is Anthropic, else OpenAI.
     model: str = "claude-haiku-5-5"
 
     # Scenario generation.
@@ -45,11 +46,13 @@ class Config:
 CONFIG = Config()
 
 
-def api_key() -> str:
-    """Return the Anthropic API key from the environment or .env, or fail clearly."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
+KEY_VARIABLES = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+
+
+def api_key(provider: str) -> str:
+    """Return the provider's API key from the environment or .env, or fail clearly."""
+    variable = KEY_VARIABLES[provider]
+    key = os.environ.get(variable)
     if not key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key."
-        )
+        raise RuntimeError(f"{variable} is not set. Copy .env.example to .env and add your key.")
     return key
