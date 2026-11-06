@@ -252,5 +252,7 @@ The table below is run once with the neutral Security prompt (main) and once wit
 - One three-agent pipeline with one honest intermediary. No conclusions about large swarms, network topologies or general multi-agent robustness.
 - One model family. Synthetic facts. Retrieval is done by code, so we don't measure whether agents would find poisoned memory on their own.
 - Author-and-source labels are a weak form of provenance, not a full provenance system.
+- Without attribution, a note's free-text comment can still hint at its author (e.g. "Agree with HR"). Comments are kept because they're the attacker's means of persuasion.
+- The order within a ticket is fixed: HR, then Security, then the Approver. This models Security's work depending on HR's result. If the order varied, the lie wouldn't always be in memory when Security acts.
 - `employment_type_used` and free-text reasoning are the model's own reports. They can't show what produced its output. We report behaviour (recommendations, decisions, tool calls) and label self-reports as declared.
 - **Dual use:** made-up employees and no real systems. The report focuses on the failure mechanism and defences, and gives no instructions for attacking a real access-management system.
