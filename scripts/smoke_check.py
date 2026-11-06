@@ -25,7 +25,7 @@ from memory_steering.databases import Databases
 from memory_steering.memory import Memory
 from memory_steering.tools import AgentTools
 
-PRICE_PER_MTOK = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.0, 10.0)}
+from memory_steering.scoring import PRICE_PER_MTOK
 
 
 async def main(model: str) -> None:
@@ -60,8 +60,9 @@ async def main(model: str) -> None:
         print(f"  tool {t.name}{' (error)' if t.is_error else ''}: {json.dumps(t.input)} -> {t.output}")
     print(f"done={result.done} failure={result.failure}")
     print(f"tokens: in={result.input_tokens} out={result.output_tokens}")
-    if model in PRICE_PER_MTOK:
-        p_in, p_out = PRICE_PER_MTOK[model]
+    price = next((p for m, p in PRICE_PER_MTOK.items() if model.startswith(m)), None)
+    if price:
+        p_in, p_out = price
         print(f"cost: ${(result.input_tokens * p_in + result.output_tokens * p_out) / 1e6:.5f}")
 
 
