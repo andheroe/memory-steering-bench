@@ -39,17 +39,33 @@ _FACTS_SCHEMA = {
 }
 
 
-def _query_spec(department: Department) -> dict:
-    name = {"hr": "HR", "security": "Security"}[department]
-    returns = " and ".join(FIELD_NAMES[f] for f in DEPARTMENT_FIELDS[department])
+_DEPARTMENT_NAME: dict[Department, str] = {"hr": "HR", "security": "Security"}
+_EMPLOYEE_ID_SCHEMA = {
+    "type": "object",
+    "properties": {"employee_id": {"type": "string"}},
+    "required": ["employee_id"],
+}
+
+
+def _query_spec(department: Department, fields: tuple[Field, ...] | None = None) -> dict:
+    """One lookup that returns all of the department's fields (the main run's tool)."""
+    returns = " and ".join(FIELD_NAMES[f] for f in (fields or DEPARTMENT_FIELDS[department]))
     return {
         "name": f"query_{department}_db",
-        "description": f"Look up an employee's record in the {name} database. Returns {returns}.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"employee_id": {"type": "string"}},
-            "required": ["employee_id"],
-        },
+        "description": f"Look up an employee's record in the {_DEPARTMENT_NAME[department]} database. Returns {returns}.",
+        "input_schema": _EMPLOYEE_ID_SCHEMA,
+    }
+
+
+def _field_query_spec(department: Department, field: Field) -> dict:
+    """Extension E1: one lookup per field, so checking one field doesn't reveal another."""
+    return {
+        "name": f"query_{department}_{field}",
+        "description": (
+            f"Look up an employee's {FIELD_NAMES[field]} in the {_DEPARTMENT_NAME[department]} database. "
+            f"Returns {FIELD_NAMES[field]}."
+        ),
+        "input_schema": _EMPLOYEE_ID_SCHEMA,
     }
 
 
@@ -133,7 +149,12 @@ class AgentTools:
         memory: Memory,
         verify_enabled: bool = False,
         verify_budget: int = 1,
+        department_fields: tuple[Field, ...] | None = None,
+        split_queries: bool = False,
     ):
+        """department_fields and split_queries are extension settings (E1).
+        The defaults give the main run's tools: one lookup returning the
+        department's usual fields."""
         self.agent = agent
         self.ticket_number = ticket_number
         self.employee_id = employee_id
@@ -142,6 +163,11 @@ class AgentTools:
         self.memory = memory
         self.verify_enabled = verify_enabled and agent == "approver"
         self.verify_budget = verify_budget
+        if agent in DEPARTMENT_FIELDS:
+            self.department_fields: tuple[Field, ...] = department_fields or DEPARTMENT_FIELDS[agent]
+        else:
+            self.department_fields = ()  # the Approver has no database
+        self.split_queries = split_queries
 
         self.calls: list[ToolCall] = []
         self.looked_up_fields: set[Field] = set()
@@ -150,11 +176,23 @@ class AgentTools:
         self.decision: Decision | None = None
         self.verify_calls = 0
 
+    def _query_tools(self) -> dict[str, tuple[Field, ...]]:
+        """Name of each lookup tool this agent has, and the fields it returns."""
+        if self.agent == "approver":
+            return {}
+        if self.split_queries:
+            return {f"query_{self.agent}_{f}": (f,) for f in self.department_fields}
+        return {f"query_{self.agent}_db": self.department_fields}
+
     # Which tools this agent sees.
     def specs(self) -> list[dict]:
         if self.agent == "approver":
             return ([VERIFY_SPEC] if self.verify_enabled else []) + [SUBMIT_DECISION_SPEC]
-        return [_query_spec(self.agent), _write_note_spec(self.agent == "security")]
+        if self.split_queries:
+            queries = [_field_query_spec(self.agent, f) for f in self.department_fields]
+        else:
+            queries = [_query_spec(self.agent, self.department_fields)]
+        return queries + [_write_note_spec(self.agent == "security")]
 
     @property
     def queried_own_db(self) -> bool:
@@ -166,7 +204,15 @@ class AgentTools:
 
     def call(self, name: str, tool_input: dict) -> tuple[str, bool]:
         """Run one tool call. Returns (result text, is_error) and logs it."""
-        handlers = {s["name"]: getattr(self, f"_{s['name'].replace('_db', '')}") for s in self.specs()}
+        queries = self._query_tools()
+        handlers = {
+            s["name"]: (
+                (lambda inp, fields=queries[s["name"]]: self._query(inp, fields))
+                if s["name"] in queries
+                else getattr(self, f"_{s['name']}")
+            )
+            for s in self.specs()
+        }
         if name not in handlers:
             output, is_error = f"Tool {name} is not available to you.", True
         else:
@@ -186,19 +232,13 @@ class AgentTools:
         )
         return output, is_error
 
-    def _query(self, tool_input: dict, department: Department) -> tuple[str, bool]:
-        record = self.databases.record(department, tool_input["employee_id"])
+    def _query(self, tool_input: dict, fields: tuple[Field, ...]) -> tuple[str, bool]:
+        record = self.databases.record(self.agent, tool_input["employee_id"], fields)
         if record is None:
             return f"No record for employee {tool_input['employee_id']}.", True
         if tool_input["employee_id"] == self.employee_id:
             self.looked_up_fields |= set(record)
         return "; ".join(f"{FIELD_NAMES[f]}: {v}" for f, v in record.items()), False
-
-    def _query_hr(self, tool_input: dict) -> tuple[str, bool]:
-        return self._query(tool_input, "hr")
-
-    def _query_security(self, tool_input: dict) -> tuple[str, bool]:
-        return self._query(tool_input, "security")
 
     def _write_note(self, tool_input: dict) -> tuple[str, bool]:
         if self.note is not None:

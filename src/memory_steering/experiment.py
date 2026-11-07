@@ -35,7 +35,7 @@ from typing import Any
 from memory_steering.backends import make_client
 from memory_steering.config import CONFIG, PROJECT_ROOT
 from memory_steering.databases import Databases
-from memory_steering.episode import Condition, all_conditions, episode_id, run_episode
+from memory_steering.episode import SETUPS, Condition, Setup, all_conditions, episode_id, run_episode
 from memory_steering.prompts import all_system_prompts, prompt_hash
 
 
@@ -47,14 +47,19 @@ def planned_episodes(
     scenarios: list[dict],
     scenario_ids: set[str] | None = None,
     condition_ids: set[str] | None = None,
+    setups: tuple[Setup, ...] = ("original",),
+    security_prompts: set[str] | None = None,
 ) -> list[tuple[dict, Condition]]:
     """Every (scenario, condition) pair the design runs, optionally filtered.
-    Controls (no attack block) get only the no-attack conditions."""
+    Controls (no attack block) get only the no-attack conditions.
+    setups: extension setups to include; the default is the main run's design."""
     pairs = []
     for s in scenarios:
         if scenario_ids and s["scenario_id"] not in scenario_ids:
             continue
-        for c in all_conditions():
+        for c in all_conditions(setups):
+            if security_prompts and c.security_prompt not in security_prompts:
+                continue
             if c.attack and s["attack"] is None:
                 continue
             if condition_ids and c.condition_id not in condition_ids:
@@ -154,12 +159,24 @@ def main() -> None:
     parser.add_argument("--model", default=CONFIG.model)
     parser.add_argument("--scenarios", help="comma-separated scenario IDs (default: all)")
     parser.add_argument("--conditions", help="comma-separated condition IDs (default: all)")
+    parser.add_argument(
+        "--setups",
+        default="original",
+        help=f"comma-separated team setups (default: original, the main run). Options: {', '.join(SETUPS)}",
+    )
+    parser.add_argument("--security-prompts", help="comma-separated: neutral, memory_first (default: both)")
     parser.add_argument("--concurrency", type=int, default=CONFIG.concurrency)
     parser.add_argument("--dry-run", action="store_true", help="list the planned episodes and stop")
     args = parser.parse_args()
 
     split = lambda v: set(v.split(",")) if v else None  # noqa: E731
-    pairs = planned_episodes(load_scenarios(), split(args.scenarios), split(args.conditions))
+    setups = tuple(args.setups.split(","))
+    unknown = set(setups) - set(SETUPS)
+    if unknown:
+        parser.error(f"unknown setup(s): {', '.join(sorted(unknown))}")
+    pairs = planned_episodes(
+        load_scenarios(), split(args.scenarios), split(args.conditions), setups, split(args.security_prompts)
+    )
     if args.dry_run:
         for s, c in pairs:
             print(episode_id(s, c))

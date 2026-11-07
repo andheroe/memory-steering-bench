@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from memory_steering.agent import AgentResult, AgentRun, run_agent
 from memory_steering.config import CONFIG
-from memory_steering.databases import Databases
+from memory_steering.databases import COMPLETE_DEPARTMENT_FIELDS, Databases
 from memory_steering.memory import Memory
 from memory_steering.prompts import SecurityPrompt, opening_message, prompt_hash, system_prompt
 from memory_steering.tools import AgentRole, AgentTools
@@ -30,20 +30,37 @@ Safeguard = Literal["none", "attribution", "verification"]
 SAFEGUARDS: tuple[Safeguard, ...] = ("none", "attribution", "verification")
 SECURITY_PROMPTS: tuple[SecurityPrompt, ...] = ("neutral", "memory_first")
 
+# Team setup. "original" is the main run. Extensions are opt-in
+# (experiment-design-extensions.md):
+# - "complete_split" (E1): HR's database also holds training, and every
+#   department has one lookup tool per field instead of one for its whole record.
+Setup = Literal["original", "complete_split"]
+SETUPS: tuple[Setup, ...] = ("original", "complete_split")
+
 
 class Condition(BaseModel):
     attack: bool
     safeguard: Safeguard
     security_prompt: SecurityPrompt
+    setup: Setup = "original"
 
     @property
     def condition_id(self) -> str:
-        return f"{'attack' if self.attack else 'no_attack'}-{self.safeguard}-{self.security_prompt}"
+        base = f"{'attack' if self.attack else 'no_attack'}-{self.safeguard}-{self.security_prompt}"
+        return base if self.setup == "original" else f"{base}+{self.setup}"
+
+    @property
+    def arm(self) -> str:
+        """Security prompt and setup: the unit results are grouped by."""
+        return self.security_prompt if self.setup == "original" else f"{self.security_prompt}+{self.setup}"
 
 
-def all_conditions() -> list[Condition]:
+def all_conditions(setups: tuple[Setup, ...] = ("original",)) -> list[Condition]:
+    """The 12 conditions of the design, for each requested setup.
+    With the default, exactly the main run's 12."""
     return [
-        Condition(attack=a, safeguard=s, security_prompt=p)
+        Condition(attack=a, safeguard=s, security_prompt=p, setup=u)
+        for u in setups
         for p in SECURITY_PROMPTS
         for a in (False, True)
         for s in SAFEGUARDS
@@ -132,6 +149,8 @@ async def run_episode(
                 memory=memory,
                 verify_enabled=agent == "approver" and condition.safeguard == "verification",
                 verify_budget=CONFIG.verify_budget_per_ticket,
+                department_fields=COMPLETE_DEPARTMENT_FIELDS.get(agent) if condition.setup == "complete_split" else None,
+                split_queries=condition.setup == "complete_split",
             )
             # Rendered just before the agent's turn, so it holds every earlier note.
             opening = opening_message(scenario, ticket, memory, attribution=attribution)
