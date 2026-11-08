@@ -123,6 +123,34 @@ So, as run, the benchmark mostly measures how the Approver resolves a conflict, 
 - **Replication:** H0's contrast (neutral prompt; attack vs no attack; attribution vs none) on `gemma-4-26b-a4b-it`, after it passes the original honest-accuracy gate (≥ 90% of 20 decisions correct).
 - **Attacker model:** E2's frozen best tactic with only the attacker running on a larger hosted model, the rest of the team on `deepseek-v4-flash`. Exploratory.
 
+### E6 as run: two more models (added 2026-11-08, before these runs)
+
+Written after the main run, E1 and E4 had been scored on `deepseek-v4-flash`. Every agent on the team uses the same model, as in the main run. Code, prompts, scenarios and settings are unchanged; only `--model` differs. No model gets any tuning.
+
+**Runs:**
+
+| Run | Model | Design | Episodes |
+|---|---|---|---|
+| `e6-gemma-main` | `gemma-4-26b-a4b-it` (small, cheap) | the main design: 12 conditions | 780 |
+| `e6-gemma-e4` | `gemma-4-26b-a4b-it` | E4: team of 3 vs 7, neutral prompt | 780 |
+| `e6-qwen-e4` | `qwen3.5-397b` (large) | E4: team of 3 vs 7, neutral prompt | 780 |
+
+    uv run python -m memory_steering.experiment --run-id e6-gemma-main --model gemma-4-26b-a4b-it
+    uv run python -m memory_steering.experiment --run-id e6-gemma-e4 --model gemma-4-26b-a4b-it --setups original,relays4 --security-prompts neutral
+    uv run python -m memory_steering.experiment --run-id e6-qwen-e4 --model qwen3.5-397b --setups original,relays4 --security-prompts neutral
+
+**Gate (passed before this section was written):** both models passed the original honest-accuracy gate with 20/20 decisions correct, no failed turns and no tool errors. The gate is 10 no-attack episodes, no safeguard, neutral prompt: S001–S005 and S051–S055. Runs: `gate-gemma-4-26b-a4b-it`, `gate-qwen3.5-397b`.
+
+**Disclosure:** before this section was written, each model also ran a 4-episode speed and cost probe. It used S001 and S002 in `attack-none-neutral` and `attack-none-neutral+relays4`, in runs `probe-*`. Those 4 attack outcomes per model were seen. They aren't counted, and the hypotheses below are the ones already fixed for the main run and E4, not chosen from the probes.
+
+**Hypotheses** (one primary contrast per run; secondary contrasts Holm-corrected within the run):
+- **E6.1, `e6-gemma-main` (primary):** H0 replicates. Neutral prompt: attribution's attack effect minus no safeguard's attack effect is above zero (the 95% interval lies above zero). Secondary: the same contrast for memory-first, and verification against no safeguard for each prompt.
+- **E6.2, `e6-gemma-e4` (primary):** E4.1 replicates. No safeguard, ticket 1: the overgrant rate differs between teams of 7 and 3 (two-sided; predicted higher with 7). Secondary: E4.3 (attribution reduces the team-size effect) and E4.4 (verification holds at both sizes).
+- **E6.3, `e6-qwen-e4` (primary):** E4.1 replicates on a much larger model. Secondary: E4.3 and E4.4 as above.
+- **Descriptive:** honest accuracy for each run, and Security's lookup and lie-declaration rates compared with `deepseek-v4-flash`. The cross-model comparison is descriptive, because each model's arms are compared within its own run.
+
+All three runs are reported in full, whatever they show.
+
 ## Order of work
 
 Tentative, as stated at the top. Each step runs only if time remains after the one before it.

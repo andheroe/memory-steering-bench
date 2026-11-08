@@ -77,7 +77,7 @@ def _git_commit() -> str | None:
         return None
 
 
-def _write_run_meta(run_dir: Path, model: str, n_planned: int) -> None:
+def _write_run_meta(run_dir: Path, model: str, n_planned: int, concurrency: int = CONFIG.concurrency) -> None:
     meta_path = run_dir / "run.json"
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {"attempts": []}
     meta.update(
@@ -88,7 +88,7 @@ def _write_run_meta(run_dir: Path, model: str, n_planned: int) -> None:
             "verify_budget_per_ticket": CONFIG.verify_budget_per_ticket,
             "max_tool_turns": CONFIG.max_tool_turns,
             "max_output_retries": CONFIG.max_output_retries,
-            "concurrency": CONFIG.concurrency,
+            "concurrency": concurrency,
             "prompt_hashes": {name: prompt_hash(text) for name, text in all_system_prompts().items()},
             "extension_prompt_hashes": {name: prompt_hash(text) for name, text in extension_system_prompts().items()},
             "versions": {p: version(p) for p in ("adaption", "pydantic")},
@@ -114,7 +114,7 @@ async def run_experiment(
     previous = run_dir / "run.json"
     if previous.exists() and json.loads(previous.read_text())["model"] != model:
         raise RuntimeError(f"Run {run_id} used another model; start a new run id.")
-    _write_run_meta(run_dir, model, len(pairs))
+    _write_run_meta(run_dir, model, len(pairs), concurrency)
     client = client or make_client()
     databases = Databases(load_scenarios())
 
