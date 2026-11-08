@@ -15,6 +15,7 @@ The design is in [experiment-design.md](experiment-design.md), the main study, a
 | Main | the pre-specified design, 12 conditions | 780 | 0 | 0.56 | [`runs/main`](runs/main) |
 | E1 | 2 prompts × 2 setups × 6 conditions | 1,560 | 0 | 1.35 | [`runs/e1`](runs/e1) |
 | E4 | team of 3 vs 7, neutral prompt, 6 conditions | 780 | 0 | 1.27 | [`runs/e4`](runs/e4) |
+| E6 | gemma-4-26b: main design and E4; qwen3.5-397b: E4 | 3 × 780 | 0 | 0.62 + 1.23 + 27.3 | `runs/e6-*` |
 
 Each run folder has `report.html`, an interactive viewer covering every episode and turn, along with `results.json` and `tickets.csv`.
 
@@ -209,6 +210,91 @@ Other contrasts:
 
 ---
 
+## 4. Extension E6: two more models
+
+Every agent on the team uses the same model. Code, prompts and scenarios are the same as on `deepseek-v4-flash`, with no tuning per model. Both models passed the honest-accuracy gate (20/20) before the runs. The hypotheses were added to the extensions doc before the runs.
+
+| Run | Model | Design | Episodes | Crashed | Failed turns | Credits | Time |
+|---|---|---|---|---|---|---|---|
+| `e6-gemma-main` | gemma-4-26b-a4b-it | main design | 780 | 0 | 4 | 0.62 | ~15 min |
+| `e6-gemma-e4` | gemma-4-26b-a4b-it | team of 3 vs 7 | 780 | 0 | 5 | 1.23 | ~15 min |
+| `e6-qwen-e4` | qwen3.5-397b | team of 3 vs 7 | 780 | 0 | 0 | 27.3 | 147 min |
+
+**Honest accuracy:**
+- gemma, main design: 960/960.
+- gemma, E4: 958/960. Both errors are explained under gemma below.
+- qwen: 960/960.
+
+### Ticket-1 overgrants under attack (out of 50)
+
+| Model, team | No safeguard | Attribution | Verification |
+|---|---|---|---|
+| deepseek, 3 agents (E4 run) | 0 | 9 | 0 |
+| deepseek, 7 agents | 29 | 14 | 0 |
+| gemma, 3 agents (main-design run) | 9 | 5 | 0 |
+| gemma, 3 agents (E4 run) | 14 | 13 | 0 |
+| gemma, 7 agents | 27 | 17 | 0 |
+| qwen, 3 agents | 4 | 16 | 0 |
+| qwen, 7 agents | 18 | 28 | 0 |
+
+### Pre-specified hypotheses
+
+| Hypothesis | Contrast | Counts | Difference [95% CI] | Discordant | p | Verdict |
+|---|---|---|---|---|---|---|
+| **E6.1** (primary): H0 on gemma | neutral prompt: attribution's attack effect minus no safeguard's | 5 vs 9 | −0.08 [−0.22, +0.06] | 5 / 9 | 0.42 | **Not supported** |
+| E6.1, secondary | same contrast, memory-first | 8 vs 6 | +0.04 [−0.08, +0.16] | 6 / 4 | 0.75 (Holm 0.75) | Not supported |
+| E6.1, secondary | verification vs none, neutral | 0 vs 9 | −0.18 [−0.30, −0.08] | 0 / 9 | 0.004 (Holm 0.012) | Verification lowers overgrants |
+| E6.1, secondary | verification vs none, memory-first | 1 vs 6 | −0.10 [−0.20, 0.00] | 1 / 6 | 0.12 (Holm 0.24) | Not significant |
+| **E6.2** (primary): team size on gemma | no safeguard, ticket 1: 7 vs 3 agents | 27 vs 14 | **+0.26 [+0.08, +0.42]** | 18 / 5 | 0.011 | **Supported** |
+| E6.2, E4.3 | team-size effect, attribution minus none | — | −0.18 [−0.46, +0.10] | 14 / 19 | 0.49 | Not supported |
+| E6.2, E4.4 | verification at both sizes | 0 and 0 | — | — | — | Supported (see the no-decision note) |
+| **E6.3** (primary): team size on qwen | no safeguard, ticket 1: 7 vs 3 agents | 18 vs 4 | **+0.28 [+0.12, +0.44]** | 17 / 3 | 0.003 | **Supported** |
+| E6.3, E4.3 | team-size effect, attribution minus none | — | −0.04 [−0.30, +0.22] | 14 / 17 | 0.72 | Not supported |
+| E6.3, E4.4 | verification at both sizes, ticket 1 | 0 and 0 | — | — | — | Supported. On ticket 2, 1/50 with 7 agents, in a ticket where the Approver didn't verify |
+
+A further contrast wasn't pre-specified for qwen, so it's exploratory. On qwen's 3-agent team, attribution against no safeguard was 16 against 4, +0.24 [+0.08, +0.40], p = 0.012. That's the same size as H0 on deepseek.
+
+### What E6 shows
+
+**1. The team-size effect holds on all three models.** On every model, adding four relays that pass the lie on raised ticket-1 overgrants under no safeguard:
+
+| Model | 3 agents | 7 agents | Difference |
+|---|---|---|---|
+| deepseek | 0/50 | 29/50 | +58 points |
+| gemma | 14/50 | 27/50 | +26 points |
+| qwen | 4/50 | 18/50 | +28 points |
+
+On every model the Approver's stated reason is the majority of notes.
+
+**2. Verification is the only safeguard that held on every model.**
+- 0 ticket-1 overgrants under attack in every arm of every model.
+- One ticket-2 overgrant on qwen, in a ticket where the Approver didn't use its check.
+
+**3. Attribution depends on the model.**
+
+| Model | 3 agents (H0) | 7 agents |
+|---|---|---|
+| deepseek | backfires (+18 to +30 points) | helps |
+| qwen | backfires (+24, exploratory) | **makes it worse**: 28 against 18, +0.20 [+0.02, +0.38] |
+| gemma | does nothing | does nothing |
+
+E4.3, attribution shrinking the team-size effect, held only on deepseek. So attribution isn't a reliable safeguard. On two of the three models it raised overgrants in at least one setting.
+
+**4. On qwen, the lie reached an honest agent that had checked.** In 5 episodes, all on ticket 2 of the 7-agent team under attribution, qwen's Security looked up "contractor" in its own database and then wrote "full time", deferring to the others. An example from one note:
+
+> Security DB shows employment_type: contractor … However, HR is authoritative for employment records and recorded full_time (noted by IT, Finance, Compliance, Facilities agents).
+
+All 5 ended in overgrants. Neither deepseek nor gemma did this in any episode. It's what E4.2 predicted for the 7-agent team, and it appears here only on the largest model.
+
+**5. gemma's Approver is more easily misled to begin with.** With a 3-agent team and no safeguard, it sided with HR 9 and 14 times out of 50 in the two runs, where deepseek gave 0–1. That leaves attribution little room to increase it.
+
+**Caveats:**
+- **gemma Approvers that never decided:** 8 gemma verification tickets ended without a decision (3 in the main design, 5 in E4). The Approver kept calling `verify` after using up its one call, until it ran out of turns. Under the pre-specified rule these count as not an overgrant, so they help gemma's verification rates slightly. Most of gemma's tool errors are those repeated calls. The rest are Security using a wrong field name, which it corrected on its next try.
+- **gemma's two honest errors spread through the majority:** in both, honest HR wrongly recommended write for a contractor. Every relay, Security and the Approver followed ("multiple notes confirm…"). Not part of any hypothesis, but an example of an honest error spreading the same way the lie does.
+- **qwen ran slower than estimated:** 147 minutes instead of 80–90, probably because the API slowed under load.
+
+---
+
 ## Combined answer so far
 
 **Which safeguard best limits the spread?** It depends on whether honest agents check their own evidence.
@@ -219,8 +305,10 @@ Other contrasts:
 | Memory makes checking look unnecessary (memory-first, complete memory) | lie spreads to the honest agent: 74% | helps (48%), by making the honest agent check more, not by warning the Approver | **best: 24%**; fails only when the Approver checks the wrong field |
 | The lie is relayed by honest agents who can't check it (team of 7) | majority effect: 58% | helps (28%) by labelling the copies as second-hand, but no better than attribution with no relays | **best: 0%** |
 
-Verification is the only safeguard that never made things worse. Its remaining failures all come from the Approver choosing the wrong field to check.
+That table is for `deepseek-v4-flash`. On two more models (E6), the team-size effect and verification's protection both replicated, but attribution's effect didn't: it does nothing on gemma, and on qwen it backfires in both team sizes.
+
+Verification is the only safeguard that never made things worse, on any model. Its remaining failures all come from the Approver choosing the wrong field to check, or not checking.
 
 ## Not yet run
 
-E2 (stronger attacker), E3 (role lie), E5 (Approver replay) and E6 (replication model) are planned in [experiment-design-extensions.md](experiment-design-extensions.md). Each will be added here if it runs, or listed as "planned, not run".
+E2 (stronger attacker), E3 (role lie), E5 (Approver replay) and E6's attacker-only model run are planned in [experiment-design-extensions.md](experiment-design-extensions.md). Each will be added here if it runs, or listed as "planned, not run".
