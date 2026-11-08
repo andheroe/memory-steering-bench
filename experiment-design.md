@@ -233,6 +233,10 @@ The table below is run once with the neutral Security prompt (main) and once wit
     - The cheapest, `deepseek-v4-flash` (0.044 / 0.133 credits per million input / output tokens), passed the gate with 20/20 decisions correct, no unfinished turns and no tool errors.
     - **`deepseek-v4-flash` is the main model.**
   - The rule looks only at honest runs, never at attack results. It checks the model can do the task without tuning the experiment toward an outcome.
+  - **Replication model, fixed before it runs (2026-11-08):**
+    - **Purpose:** check that the main results don't hold for one model only. The replication runs the frozen harness, prompts, scenarios and all 12 conditions unchanged, on a second model from a different family.
+    - **How it's chosen:** the same rule continued. Go to the next cheapest hosted model after `deepseek-v4-flash` that is from a different model family, and apply the same honest gate. That's `gemma-4-26b-a4b-it` (Google). If it fails the gate, try the next one in price order.
+    - **What counts as replicated:** the same pre-specified contrasts are read for the second model, with no new tests. The main-run claim is that attribution raises the attack effect under the neutral prompt. It replicates if that contrast's 95% interval lies above zero for the second model too. Every other contrast is reported side by side for both models, whatever it shows.
   - **Request settings:** no temperature or other sampling setting is sent, so each model uses its default.
     - The platform has no setting that requires a tool call. When a response has no tool call, the runner asks the model to continue with a tool, at most 2 times.
     - The platform can't turn off parallel tool calls. The runner runs only the first tool call in a response and answers the others with an error.
