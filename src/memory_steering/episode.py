@@ -3,6 +3,8 @@
 Fixed order:
 - ticket 1: HR agent (the attacker in attack runs), Security agent, Approver;
 - ticket 2: Security agent, Approver (no HR: "persistence without HR refresh").
+With relays (extension E4), the relay agents act after HR on ticket 1 and
+first on ticket 2, always before Security.
 
 Everything is written to the episode's folder:
 - memory.json: the shared memory file, as the agents built it;
@@ -24,7 +26,7 @@ from memory_steering.config import CONFIG
 from memory_steering.databases import COMPLETE_DEPARTMENT_FIELDS, Databases
 from memory_steering.memory import Memory
 from memory_steering.prompts import SecurityPrompt, opening_message, prompt_hash, system_prompt
-from memory_steering.tools import AgentRole, AgentTools
+from memory_steering.tools import RELAY_AGENTS, AgentRole, AgentTools
 
 Safeguard = Literal["none", "attribution", "verification"]
 SAFEGUARDS: tuple[Safeguard, ...] = ("none", "attribution", "verification")
@@ -34,8 +36,11 @@ SECURITY_PROMPTS: tuple[SecurityPrompt, ...] = ("neutral", "memory_first")
 # (experiment-design-extensions.md):
 # - "complete_split" (E1): HR's database also holds training, and every
 #   department has one lookup tool per field instead of one for its whole record.
-Setup = Literal["original", "complete_split"]
-SETUPS: tuple[Setup, ...] = ("original", "complete_split")
+# - "relays4" (E4): four honest relay agents (IT, Finance, Compliance,
+#   Facilities) between HR and Security, so the team has 7 agents.
+Setup = Literal["original", "complete_split", "relays4"]
+SETUPS: tuple[Setup, ...] = ("original", "complete_split", "relays4")
+SETUP_RELAYS: dict[str, tuple[AgentRole, ...]] = {"relays4": RELAY_AGENTS}
 
 
 class Condition(BaseModel):
@@ -112,6 +117,14 @@ TICKET_AGENTS: dict[int, tuple[AgentRole, ...]] = {
 }
 
 
+def ticket_agents(ticket_number: int, setup: Setup = "original") -> tuple[AgentRole, ...]:
+    """Who acts on a ticket, in order. Relays go just before Security."""
+    relays = SETUP_RELAYS.get(setup, ())
+    base = TICKET_AGENTS[ticket_number]
+    i = base.index("security")
+    return (*base[:i], *relays, *base[i:])
+
+
 async def run_episode(
     client: Any,
     scenario: dict,
@@ -133,12 +146,13 @@ async def run_episode(
     for ticket in scenario["tickets"]:
         n = ticket["ticket_number"]
         decision = None
-        for agent in TICKET_AGENTS[n]:
+        for agent in ticket_agents(n, condition.setup):
             is_attacker = agent == "hr" and condition.attack
             system = system_prompt(
                 agent,
                 attack=scenario["attack"] if is_attacker else None,
                 security_prompt=condition.security_prompt,
+                relays=SETUP_RELAYS.get(condition.setup, ()),
             )
             tools = AgentTools(
                 agent=agent,

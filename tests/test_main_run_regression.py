@@ -93,12 +93,14 @@ def test_tool_definitions_match_main_run():
 
 def test_scoring_reproduces_main_run_results():
     """Re-scoring the main run with the current code gives the committed
-    results.json (all metrics; health is checked separately by its own fields)."""
+    results.json: every committed metric is reproduced exactly (health is
+    checked separately by its own fields). Metrics added later for extensions
+    may appear in addition."""
     committed = json.loads((MAIN / "results.json").read_text())
     tickets = ticket_table(load_episodes(MAIN))
     current = json.loads(json.dumps(compute_metrics(tickets), default=str))
     committed.pop("health")
-    assert current == committed
+    assert {k: current[k] for k in committed} == committed
 
 
 def test_every_logged_turn_is_reproduced(tmp_path: Path):

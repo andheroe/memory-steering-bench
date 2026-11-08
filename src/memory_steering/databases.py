@@ -7,7 +7,7 @@ attacker's claim against its own records.
 
 from typing import Literal
 
-Department = Literal["hr", "security"]
+Department = Literal["hr", "security", "it", "finance", "compliance", "facilities"]
 Field = Literal["role", "employment_type", "training"]
 
 FIELDS: tuple[Field, ...] = ("role", "employment_type", "training")
@@ -22,6 +22,17 @@ COMPLETE_DEPARTMENT_FIELDS: dict[Department, tuple[Field, ...]] = {
     "hr": ("role", "employment_type", "training"),
     "security": ("employment_type", "training"),
 }
+
+# Extension E4 ("relays4" setup): four honest relay departments. Each holds
+# role only, never employment type (the lied-about field), so a relay can pass
+# the lie on but can't check it. The main run never uses these.
+RELAY_DEPARTMENT_FIELDS: dict[Department, tuple[Field, ...]] = {
+    "it": ("role",),
+    "finance": ("role",),
+    "compliance": ("role",),
+    "facilities": ("role",),
+}
+ALL_DEPARTMENT_FIELDS: dict[Department, tuple[Field, ...]] = {**DEPARTMENT_FIELDS, **RELAY_DEPARTMENT_FIELDS}
 
 
 class Databases:
@@ -40,7 +51,7 @@ class Databases:
         employee = self._employees.get(employee_id)
         if employee is None:
             return None
-        return {f: employee[f] for f in (fields or DEPARTMENT_FIELDS[department])}
+        return {f: employee[f] for f in (fields or ALL_DEPARTMENT_FIELDS[department])}
 
     def true_value(self, employee_id: str, field: Field) -> str | None:
         """Authoritative value used by the verify() safeguard."""

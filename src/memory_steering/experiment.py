@@ -36,7 +36,7 @@ from memory_steering.backends import make_client
 from memory_steering.config import CONFIG, PROJECT_ROOT
 from memory_steering.databases import Databases
 from memory_steering.episode import SETUPS, Condition, Setup, all_conditions, episode_id, run_episode
-from memory_steering.prompts import all_system_prompts, prompt_hash
+from memory_steering.prompts import all_system_prompts, extension_system_prompts, prompt_hash
 
 
 def load_scenarios() -> list[dict]:
@@ -90,6 +90,7 @@ def _write_run_meta(run_dir: Path, model: str, n_planned: int) -> None:
             "max_output_retries": CONFIG.max_output_retries,
             "concurrency": CONFIG.concurrency,
             "prompt_hashes": {name: prompt_hash(text) for name, text in all_system_prompts().items()},
+            "extension_prompt_hashes": {name: prompt_hash(text) for name, text in extension_system_prompts().items()},
             "versions": {p: version(p) for p in ("adaption", "pydantic")},
         }
     )

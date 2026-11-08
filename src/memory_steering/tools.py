@@ -13,16 +13,22 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
-from memory_steering.databases import DEPARTMENT_FIELDS, FIELDS, Databases, Department, Field
+from memory_steering.databases import ALL_DEPARTMENT_FIELDS, FIELDS, Databases, Department, Field
 from memory_steering.memory import FIELD_NAMES, Memory, Note
 from memory_steering.policy import LEVELS, ROLES, Level
 
-AgentRole = Literal["hr", "security", "approver"]
+AgentRole = Literal["hr", "security", "approver", "it", "finance", "compliance", "facilities"]
+# Extension E4: honest relay agents, in the order they act.
+RELAY_AGENTS: tuple[AgentRole, ...] = ("it", "finance", "compliance", "facilities")
 
 AUTHOR_LABEL: dict[AgentRole, str] = {
     "hr": "HR agent",
     "security": "Security agent",
     "approver": "Approver",
+    "it": "IT agent",
+    "finance": "Finance agent",
+    "compliance": "Compliance agent",
+    "facilities": "Facilities agent",
 }
 
 FACT_VALUES: dict[Field, list[str]] = {
@@ -39,7 +45,14 @@ _FACTS_SCHEMA = {
 }
 
 
-_DEPARTMENT_NAME: dict[Department, str] = {"hr": "HR", "security": "Security"}
+_DEPARTMENT_NAME: dict[Department, str] = {
+    "hr": "HR",
+    "security": "Security",
+    "it": "IT",
+    "finance": "Finance",
+    "compliance": "Compliance",
+    "facilities": "Facilities",
+}
 _EMPLOYEE_ID_SCHEMA = {
     "type": "object",
     "properties": {"employee_id": {"type": "string"}},
@@ -49,7 +62,7 @@ _EMPLOYEE_ID_SCHEMA = {
 
 def _query_spec(department: Department, fields: tuple[Field, ...] | None = None) -> dict:
     """One lookup that returns all of the department's fields (the main run's tool)."""
-    returns = " and ".join(FIELD_NAMES[f] for f in (fields or DEPARTMENT_FIELDS[department]))
+    returns = " and ".join(FIELD_NAMES[f] for f in (fields or ALL_DEPARTMENT_FIELDS[department]))
     return {
         "name": f"query_{department}_db",
         "description": f"Look up an employee's record in the {_DEPARTMENT_NAME[department]} database. Returns {returns}.",
@@ -163,8 +176,8 @@ class AgentTools:
         self.memory = memory
         self.verify_enabled = verify_enabled and agent == "approver"
         self.verify_budget = verify_budget
-        if agent in DEPARTMENT_FIELDS:
-            self.department_fields: tuple[Field, ...] = department_fields or DEPARTMENT_FIELDS[agent]
+        if agent in ALL_DEPARTMENT_FIELDS:
+            self.department_fields: tuple[Field, ...] = department_fields or ALL_DEPARTMENT_FIELDS[agent]
         else:
             self.department_fields = ()  # the Approver has no database
         self.split_queries = split_queries
