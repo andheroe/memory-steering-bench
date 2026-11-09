@@ -124,13 +124,22 @@ def system_prompt(
     return f"{team_brief(relays)}\n\n{_ROLE[agent]}\n\n{instruction}"
 
 
-def opening_message(scenario: dict, ticket: dict, memory: Memory, *, attribution: bool) -> str:
-    """The ticket plus team memory, as one agent sees it at the start of its turn."""
+def opening_message(
+    scenario: dict,
+    ticket: dict,
+    memory: Memory,
+    *,
+    attribution: bool,
+    authors: bool | None = None,
+    labels: bool | None = None,
+) -> str:
+    """The ticket plus team memory, as one agent sees it at the start of its turn.
+    authors / labels: extension E5's separate switches (see Memory.render)."""
     employee = scenario["employee"]
     return (
         f"Ticket {ticket['ticket_number']}: {employee['name']} (employee ID {employee['employee_id']}) "
         f"requests {ticket['requested']} access to {ticket['system']}.\n\n"
-        + memory.render(employee["employee_id"], ticket["ticket_number"], attribution=attribution)
+        + memory.render(employee["employee_id"], ticket["ticket_number"], attribution=attribution, authors=authors, labels=labels)
     )
 
 

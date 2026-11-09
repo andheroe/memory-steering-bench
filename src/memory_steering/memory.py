@@ -106,27 +106,41 @@ class Memory:
         tmp.write_text(json.dumps([n.model_dump() for n in self._notes], indent=2) + "\n")
         tmp.replace(self.path)
 
-    def render(self, employee_id: str, ticket_number: int, attribution: bool) -> str:
+    def render(
+        self,
+        employee_id: str,
+        ticket_number: int,
+        attribution: bool,
+        *,
+        authors: bool | None = None,
+        labels: bool | None = None,
+    ) -> str:
         """Memory as it appears in an agent's prompt.
+
+        authors / labels (extension E5) switch the two parts of attribution
+        separately; each defaults to `attribution`, which gives the main run's
+        rendering. With labels but no authors, other notes are cited by number only.
 
         Facts from every note about the employee; recommendation and text only
         from notes on the current ticket. With attribution, each note shows its
         author and each fact its source label.
         """
+        show_authors = attribution if authors is None else authors
+        show_labels = attribution if labels is None else labels
         notes = [n for n in self._notes if n.employee_id == employee_id]
         if not notes:
             return "Team memory: no notes about this employee yet."
-        authors = {n.note_id: n.author for n in notes}
+        names = {n.note_id: n.author for n in notes}
         lines = [f"Team memory: {len(notes)} note(s) about employee {employee_id}."]
         for n in notes:
             header = f"Note {n.note_id} (ticket {n.ticket_number})"
-            if attribution:
+            if show_authors:
                 header += f", written by {n.author}"
             lines.append(header + ":")
             for field, value in n.facts.items():
                 line = f"  - {FIELD_NAMES[field]}: {value}"
-                if attribution:
-                    line += f" ({_source_label(n.fact_sources[field], authors)})"
+                if show_labels:
+                    line += f" ({_source_label(n.fact_sources[field], names if show_authors else None)})"
                 lines.append(line)
             if n.ticket_number == ticket_number:
                 lines.append(f"  - recommendation for {n.system}: {n.recommendation}")
@@ -135,13 +149,14 @@ class Memory:
         return "\n".join(lines)
 
 
-def _source_label(source: FactSource, authors: dict[int, str]) -> str:
+def _source_label(source: FactSource, authors: dict[int, str] | None) -> str:
+    """authors None: cite other notes by number only (extension E5)."""
     parts = [
         "looked up in own database before writing"
         if source.looked_up
         else "not looked up in own database before writing"
     ]
     if source.same_value_as:
-        refs = ", ".join(f"note {i} by {authors[i]}" for i in source.same_value_as)
+        refs = ", ".join(f"note {i} by {authors[i]}" if authors else f"note {i}" for i in source.same_value_as)
         parts.append(f"same value as {refs}")
     return "; ".join(parts)

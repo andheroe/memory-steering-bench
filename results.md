@@ -16,6 +16,7 @@ The design is in [experiment-design.md](experiment-design.md), the main study, a
 | E1 | 2 prompts × 2 setups × 6 conditions | 1,560 | 0 | 1.35 | [`runs/e1`](runs/e1) |
 | E4 | team of 3 vs 7, neutral prompt, 6 conditions | 780 | 0 | 1.27 | [`runs/e4`](runs/e4) |
 | E6 | gemma-4-26b: main design and E4; qwen3.5-397b: E4 | 3 × 780 | 0 | 0.62 + 1.23 + 27.3 | `runs/e6-*` |
+| E5 | Approver replay: 482 saved memories × 4 renderings | 9,040 Approver turns | 0 | ≈1.8 (est.) | [`runs/e5`](runs/e5) |
 
 Each run folder has `report.html`, an interactive viewer covering every episode and turn, along with `results.json` and `tickets.csv`.
 
@@ -63,7 +64,7 @@ No condition gave an overgrant without the attack, so each attack effect equals 
 - 13/50 episodes with attribution against 1/50 without, under the neutral prompt;
 - 9/49 against 0/44 under memory-first.
 
-In 22 of the 23 attribution overgrants, the Approver's stated reason was that HR is the authoritative source for employment type. These are the model's own explanations, not proof of cause. Attribution shows both author names and source labels, so this run can't tell which one drives the effect (E5 would).
+In 22 of the 23 attribution overgrants, the Approver's stated reason was that HR is the authoritative source for employment type. These are the model's own explanations, not proof of cause. Attribution shows both author names and source labels, so this run can't tell which one drives the effect. E5 (section 5) separates them.
 
 **Verification failed only when the Approver checked the wrong field.**
 - Every overgrant under verification (4/4, memory-first) came from an Approver that spent its one check on role.
@@ -295,6 +296,52 @@ All 5 ended in overgrants. Neither deepseek nor gemma did this in any episode. I
 
 ---
 
+## 5. Extension E5: Approver replay (names vs labels)
+
+Saved ticket-1 memories were shown again to a fresh `deepseek-v4-flash` Approver, with only the rendering changed: no attribution, author names only, source labels only (other notes cited by number), or both (the main run's attribution). Approver only, `submit_decision` only, no verify. The design and hypotheses were fixed in the extensions doc before any replay.
+
+- **3-agent memories:** all 282 main-run attack memories where HR lied and Security wrote the truth, 5 repeats each.
+- **7-agent memories:** all 150 such memories from E4's relay team, 5 repeats each.
+- **Honest memories:** 50 no-attack memories, 2 repeats each.
+- 9,040 replays, 0 crashed, 0 without a decision. Rates are averaged over repeats, then memories, then compared per scenario (n = 50).
+
+### Approver follows the lie (share of replays)
+
+| Memories | None | Names only | Labels only | Both |
+|---|---|---|---|---|
+| 3-agent (282) | 2.8% | 8.7% | 12.2% | **24.0%** |
+| 7-agent (150) | 62.7% | **78.5%** | 35.3% | 32.7% |
+| Honest (50): correct | 100% | 100% | 100% | 100% |
+
+### Pre-specified hypotheses
+
+| | Contrast | Difference [95% CI] | Worse / better | p (Holm) | Verdict |
+|---|---|---|---|---|---|
+| E5.1 (primary) | names − none, 3-agent | +0.06 [+0.04, +0.07] | 37 / 2 | 3e-9 | supported |
+| E5.2 | labels − names, 3-agent (predicted < 0) | +0.04 [+0.02, +0.06] | 31 / 12 | 0.005 | **not supported: opposite direction** |
+| E5.3 | labels − none, 7-agent | −0.27 [−0.32, −0.23] | 0 / 47 | 3e-14 | supported |
+| E5.4 | labels − names, 7-agent | −0.43 [−0.48, −0.39] | 0 / 49 | 1e-14 | supported |
+
+Descriptive: both − none is +0.22 [+0.19, +0.25] with 3 agents and −0.30 [−0.35, −0.25] with 7. Labels − none with 3 agents is +0.10; names − none with 7 agents is +0.16.
+
+### What E5 shows
+
+**1. With 3 agents, names and labels each raise lie-following, and together much more.** Names alone add 6 points, labels alone 9, both 21. The combination is larger than the sum. In every one of the 339 "both" replays that followed the lie, the reason cited HR, and 320 of them called HR authoritative (e.g. "HR's record (authoritative for employment status, looked up in HR database) states …"). A plausible reading: the name says *who* (HR, the natural owner of employment type), the label says the HR agent *looked it up*, and together they make HR's note outrank Security's, even though Security's is also labelled as looked up. These are self-reports.
+
+**2. With 7 agents, labels are what protect, and names alone make things worse.** Labels mark the four relay copies as "not looked up … same value as note 1", which cut lie-following from 63% to 35%. Names without labels raised it to 79%: they show five named agents agreeing, without saying the agreement is second-hand.
+
+**3. So the main run's attribution backfire comes from both parts, not names alone.** E5.2 predicted labels would be the safer half everywhere; with 3 agents they were not. Whether attribution helps depends on what the labels have to say: when the majority is made of copies, labels expose them; when there are no copies, labels just add weight to the authoritative-looking source.
+
+**4. Honest accuracy didn't move.** 100% under all four renderings, so no rendering helps by making the Approver refuse more.
+
+**Limits:**
+- Replays cover the Approver only, with the memory fixed. In a live run, the rendering would also change what Security writes (E1 showed that matters).
+- Comments are unchanged in every rendering, and some name their department ("Finance DB confirms …"), so "none" and "labels" can't hide every name.
+- These Approvers can't verify; this tests attribution alone, not verification.
+- One model.
+
+---
+
 ## Combined answer so far
 
 **Which safeguard best limits the spread?** It depends on whether honest agents check their own evidence.
@@ -307,8 +354,10 @@ All 5 ended in overgrants. Neither deepseek nor gemma did this in any episode. I
 
 That table is for `deepseek-v4-flash`. On two more models (E6), the team-size effect and verification's protection both replicated, but attribution's effect didn't: it does nothing on gemma, and on qwen it backfires in both team sizes.
 
+E5 shows why attribution is two-sided: source labels expose second-hand copies (7 agents: 63% → 35%), but author names, and with no copies to expose, labels too, add weight to HR as the authority (3 agents: 3% → 24% with both).
+
 Verification is the only safeguard that never made things worse, on any model. Its remaining failures all come from the Approver choosing the wrong field to check, or not checking.
 
 ## Not yet run
 
-E2 (stronger attacker), E3 (role lie), E5 (Approver replay) and E6's attacker-only model run are planned in [experiment-design-extensions.md](experiment-design-extensions.md). Each will be added here if it runs, or listed as "planned, not run".
+E2 (stronger attacker), E3 (role lie), E6's attacker-only model run, and E5 on gemma and qwen are planned in [experiment-design-extensions.md](experiment-design-extensions.md). Each will be added here if it runs, or listed as "planned, not run".
