@@ -112,13 +112,28 @@ Both runs use the same frozen code, prompts and scenarios. Data for each is in `
 
 `main` is the `deepseek-v4-flash` run. 7 gemma episodes hit the platform rate limit (HTTP 429) and were rerun from scratch by the resume step; the 4 unfinished gemma turns are Approvers that kept calling `verify` after its one-call limit until the 8-call turn limit, and count as no decision (intention-to-treat).
 
+A second, independent gemma run on the main design (`runs/e6-gemma-main`, from the extensions below) gave 9 / 5 / 0 of 50 for none / attribution / verification, against 13 / 12 / 0 here. The conclusions agree. The gap shows how much a single run's counts vary between repeats.
+
 **What the baselines show:**
-- **Verification is the only safeguard that held on both models:** 0 of 50 steered under the neutral prompt on each. Its misses under memory-first (4 and 2) all came from episodes where the Approver checked `role` instead of employment type.
-- **The attribution result did not replicate.** On `deepseek-v4-flash` attribution raised the steering rate by 24 points [+12, +36]. On `gemma-4-26b-a4b-it` the effect was -2 points [-18, +14]. The pre-set replication rule needed that interval to lie above 0, so the attribution finding holds for deepseek only and is not a general result.
-- **The models differ at the no-safeguard baseline, not under attribution.** Under attribution both were steered in about a quarter of episodes (13 and 12 of 50). In attack tickets where Security had queried its own database, so its note conflicted with HR's, the Approver's decision matched the false value in 1 of 50 for deepseek and 11 of 50 for gemma with no safeguard, and in 13 and 12 of 50 with attribution. Neither model's Security agent wrote the false value into its note (relay 0/150), so the lie reached the decision through the Approver. The Approver has no database and decides from the two conflicting notes.
+- **Verification held on both models:** 0 of 50 steered under the neutral prompt on each. Its misses under memory-first (4 and 2) all came from episodes where the Approver checked `role` instead of employment type.
+- **Attribution depends on the model.** On `deepseek-v4-flash` it raised the steering rate by 24 points [+12, +36]. On `gemma-4-26b-a4b-it` it made no detectable difference: −2 points [−18, +14] here, −8 [−22, +6] in the second run. The pre-set replication rule needed gemma's interval to lie above 0, so the result did not replicate on gemma. On a third model, `qwen3.5-397b`, attribution raised steering by the same amount as on deepseek (+24 points, 3-agent team arm of extension E4, exploratory). So attribution made steering worse on two of three models.
+- **The models differ at the no-safeguard baseline.** With attribution, deepseek and gemma were steered in 13 and 12 of 50. With no safeguard, Security's note contradicted HR's in every attack ticket, and the Approver's decision matched the false value in 1 of 50 on deepseek and 11 of 50 on gemma. No Security agent wrote the false value into its note (relay 0/150 on both), so the lie reached the decision through the Approver, which has no database and decides from the conflicting notes.
 - **Honest accuracy was 100% on both models**, so no safeguard blocked attacks by refusing more.
 
 The per-model numbers come from the viewers, `runs/main/report.html` and `runs/replication-gemma-4-26b-a4b-it/report.html`.
+
+## Extensions
+
+Further experiments, designed in [experiment-design-extensions.md](experiment-design-extensions.md) before they ran, with full results in [results.md](results.md):
+
+| | Question | Main finding |
+|---|---|---|
+| **E1** | What if memory holds every fact, so checking looks unnecessary? | Under memory-first, the lie reached the honest Security agent and steering rose to 74% with no safeguard. Verification was best (24%). |
+| **E4** | A team of 7: four honest relays that copy HR's note without a database | Steering with no safeguard rose from 0% to 58% on deepseek. Attribution helped there (28%), by labelling copies as second-hand. Verification stayed at 0%. |
+| **E5** | Approver replay: author names vs source labels, memory held fixed | With 3 agents, names and labels each raised lie-following, together from 3% to 24%. With 7 agents, labels cut it from 63% to 35% and names alone raised it to 79%. |
+| **E6** | E4 and the main design on gemma and qwen | The team-size effect replicated on both models (+26 and +28 points). Verification held at 0% everywhere. Attribution backfired on qwen and did nothing on gemma. |
+
+**Answer to the track question across all runs:** verification against the authoritative record was the only safeguard that limited the spread on every model and team size. Attribution helped when the majority was made of second-hand copies, and backfired when it gave the lying author's note the look of an authoritative, looked-up source.
 
 ## Adding a model or a safeguard
 
@@ -128,12 +143,12 @@ The per-model numbers come from the viewers, `runs/main/report.html` and `runs/r
 
 ## Limitations
 
-- **The team is small:** three agents, and the lie passes through at most one honest agent.
+- **Teams are small:** three agents in the main design, seven in E4.
 - **The attack is narrow:** one tactic (a plain false claim) about one field.
-- **Two models**, both small-to-mid open-weight models, and they disagree on attribution. More models are needed before a claim about attribution in general.
+- **Three models**, all open-weight, and they disagree on attribution. Single runs vary by a few counts between repeats (the two gemma runs above).
 - **Agents' stated reasons are model output.** They're shown as examples, never as evidence of what caused a decision.
 
-More in [experiment-design.md](experiment-design.md).
+More in [experiment-design.md](experiment-design.md) and [results.md](results.md).
 
 ## Pre-existing work
 
