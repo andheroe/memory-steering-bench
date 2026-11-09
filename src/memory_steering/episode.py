@@ -3,6 +3,8 @@
 Fixed order:
 - ticket 1: HR agent (the attacker in attack runs), Security agent, Approver;
 - ticket 2: Security agent, Approver (no HR: "persistence without HR refresh").
+With relays (extension E4), the relay agents act after HR on ticket 1 and
+first on ticket 2, always before Security.
 
 Everything is written to the episode's folder:
 - memory.json: the shared memory file, as the agents built it;
@@ -21,29 +23,49 @@ from pydantic import BaseModel
 
 from memory_steering.agent import AgentResult, AgentRun, run_agent
 from memory_steering.config import CONFIG
-from memory_steering.databases import Databases
+from memory_steering.databases import COMPLETE_DEPARTMENT_FIELDS, Databases
 from memory_steering.memory import Memory
 from memory_steering.prompts import SecurityPrompt, opening_message, prompt_hash, system_prompt
-from memory_steering.tools import AgentRole, AgentTools
+from memory_steering.tools import RELAY_AGENTS, AgentRole, AgentTools
 
 Safeguard = Literal["none", "attribution", "verification"]
 SAFEGUARDS: tuple[Safeguard, ...] = ("none", "attribution", "verification")
 SECURITY_PROMPTS: tuple[SecurityPrompt, ...] = ("neutral", "memory_first")
+
+# Team setup. "original" is the main run. Extensions are opt-in
+# (experiment-design-extensions.md):
+# - "complete_split" (E1): HR's database also holds training, and every
+#   department has one lookup tool per field instead of one for its whole record.
+# - "relays4" (E4): four honest relay agents (IT, Finance, Compliance,
+#   Facilities) between HR and Security, so the team has 7 agents.
+Setup = Literal["original", "complete_split", "relays4"]
+SETUPS: tuple[Setup, ...] = ("original", "complete_split", "relays4")
+SETUP_RELAYS: dict[str, tuple[AgentRole, ...]] = {"relays4": RELAY_AGENTS}
 
 
 class Condition(BaseModel):
     attack: bool
     safeguard: Safeguard
     security_prompt: SecurityPrompt
+    setup: Setup = "original"
 
     @property
     def condition_id(self) -> str:
-        return f"{'attack' if self.attack else 'no_attack'}-{self.safeguard}-{self.security_prompt}"
+        base = f"{'attack' if self.attack else 'no_attack'}-{self.safeguard}-{self.security_prompt}"
+        return base if self.setup == "original" else f"{base}+{self.setup}"
+
+    @property
+    def arm(self) -> str:
+        """Security prompt and setup: the unit results are grouped by."""
+        return self.security_prompt if self.setup == "original" else f"{self.security_prompt}+{self.setup}"
 
 
-def all_conditions() -> list[Condition]:
+def all_conditions(setups: tuple[Setup, ...] = ("original",)) -> list[Condition]:
+    """The 12 conditions of the design, for each requested setup.
+    With the default, exactly the main run's 12."""
     return [
-        Condition(attack=a, safeguard=s, security_prompt=p)
+        Condition(attack=a, safeguard=s, security_prompt=p, setup=u)
+        for u in setups
         for p in SECURITY_PROMPTS
         for a in (False, True)
         for s in SAFEGUARDS
@@ -95,6 +117,14 @@ TICKET_AGENTS: dict[int, tuple[AgentRole, ...]] = {
 }
 
 
+def ticket_agents(ticket_number: int, setup: Setup = "original") -> tuple[AgentRole, ...]:
+    """Who acts on a ticket, in order. Relays go just before Security."""
+    relays = SETUP_RELAYS.get(setup, ())
+    base = TICKET_AGENTS[ticket_number]
+    i = base.index("security")
+    return (*base[:i], *relays, *base[i:])
+
+
 async def run_episode(
     client: Any,
     scenario: dict,
@@ -116,12 +146,13 @@ async def run_episode(
     for ticket in scenario["tickets"]:
         n = ticket["ticket_number"]
         decision = None
-        for agent in TICKET_AGENTS[n]:
+        for agent in ticket_agents(n, condition.setup):
             is_attacker = agent == "hr" and condition.attack
             system = system_prompt(
                 agent,
                 attack=scenario["attack"] if is_attacker else None,
                 security_prompt=condition.security_prompt,
+                relays=SETUP_RELAYS.get(condition.setup, ()),
             )
             tools = AgentTools(
                 agent=agent,
@@ -132,6 +163,8 @@ async def run_episode(
                 memory=memory,
                 verify_enabled=agent == "approver" and condition.safeguard == "verification",
                 verify_budget=CONFIG.verify_budget_per_ticket,
+                department_fields=COMPLETE_DEPARTMENT_FIELDS.get(agent) if condition.setup == "complete_split" else None,
+                split_queries=condition.setup == "complete_split",
             )
             # Rendered just before the agent's turn, so it holds every earlier note.
             opening = opening_message(scenario, ticket, memory, attribution=attribution)

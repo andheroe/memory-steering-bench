@@ -148,7 +148,7 @@ const R = DATA.results;
 const SAFEGUARDS = ["none", "attribution", "verification"];
 const SG_NAME = { none: "No safeguard", attribution: "Attribution", verification: "Verification" };
 const PROMPT_NAME = { neutral: "Neutral Security prompt", memory_first: "Memory-first Security prompt" };
-const AGENT_NAME = { hr: "HR agent", security: "Security agent", approver: "Approver" };
+const AGENT_NAME = { hr: "HR agent", security: "Security agent", approver: "Approver", it: "IT agent", finance: "Finance agent", compliance: "Compliance agent", facilities: "Facilities agent" };
 const OUTCOME = {
   correct: { label: "Correct", glyph: "✓" },
   overgrant: { label: "Overgrant", glyph: "▲" },
@@ -156,7 +156,12 @@ const OUTCOME = {
   no_decision: { label: "No decision", glyph: "–" },
 };
 const LEVELS = ["none", "read", "write", "admin"];
-const prompts = [...new Set(DATA.tickets.map(t => t.security_prompt))].sort((a, b) => a === "neutral" ? -1 : 1);
+// Results are grouped by arm: the Security prompt, plus the setup for extension runs.
+const armOf = r => r.arm || r.security_prompt;
+const condArm = c => c.setup && c.setup !== "original" ? `${c.security_prompt}+${c.setup}` : c.security_prompt;
+const SETUP_NAME = { complete_split: "complete memory + split tools", relays4: "team of 7 (4 relays)" };
+const armName = a => { const [p, s] = a.split("+"); return (PROMPT_NAME[p] || p) + (s ? ` · ${SETUP_NAME[s] || s}` : ""); };
+const prompts = [...new Set(DATA.tickets.map(armOf))].sort((a, b) => a === "neutral" ? -1 : b === "neutral" ? 1 : a < b ? -1 : 1);
 let state = { prompt: prompts[0] || "neutral" };
 try { const saved = localStorage.getItem("ms-prompt"); if (saved && prompts.includes(saved)) state.prompt = saved; } catch (e) {}
 
@@ -181,8 +186,8 @@ function showTip(evt, html) {
 function hideTip() { $tip.style.display = "none"; }
 
 function promptToggle() {
-  if (prompts.length < 2) return `<span class="chip">${esc(PROMPT_NAME[state.prompt])}</span>`;
-  return `<div class="seg">${prompts.map(p => `<button data-prompt="${p}" class="${p === state.prompt ? "on" : ""}">${PROMPT_NAME[p]}</button>`).join("")}</div>`;
+  if (prompts.length < 2) return `<span class="chip">${esc(armName(state.prompt))}</span>`;
+  return `<div class="seg">${prompts.map(p => `<button data-prompt="${esc(p)}" class="${p === state.prompt ? "on" : ""}">${esc(armName(p))}</button>`).join("")}</div>`;
 }
 function header(crumbs) {
   const h = R.health;
@@ -301,8 +306,8 @@ function drawBars(el, block) {
 // ---------- level 2: condition ----------
 function condition(sg) {
   const p = state.prompt;
-  const att = rows(r => r.safeguard === sg && r.security_prompt === p && r.attack);
-  const hon = rows(r => r.safeguard === sg && r.security_prompt === p && !r.attack);
+  const att = rows(r => r.safeguard === sg && armOf(r) === p && r.attack);
+  const hon = rows(r => r.safeguard === sg && armOf(r) === p && !r.attack);
   const rate = (rs, f) => rs.length ? rs.filter(f).length / rs.length : null;
   const frac = (rs, f) => rs.length ? `${rs.filter(f).length}/${rs.length}` : "not run";
   const over = r => r.outcome === "overgrant";
@@ -316,9 +321,11 @@ function condition(sg) {
     + tile("Honest accuracy", pct(rate(hon, r => r.outcome === "correct")), frac(hon, r => r.outcome === "correct") + " decisions, eligible + controls");
 
   const four = n => {
-    const rs = att.filter(r => r.ticket === n && r.security_queried != null);
+    // "Queried" = looked up employment type (the lied-about field); older runs only have security_queried.
+    const checked = r => r.security_checked_employment ?? r.security_queried;
+    const rs = att.filter(r => r.ticket === n && checked(r) != null);
     if (!rs.length) return `<p class="empty">No attack episodes in this condition.</p>`;
-    const c = (q, d) => rs.filter(r => r.security_queried === q && r.security_declared_lie === d).length;
+    const c = (q, d) => rs.filter(r => checked(r) === q && r.security_declared_lie === d).length;
     return `<div class="four">
       <div></div><div class="h">Declared the lie</div><div class="h">Didn't declare it</div>
       <div class="h">Queried own DB</div><div class="c bad"><b>${c(true, true)}</b>despite querying</div><div class="c"><b>${c(true, false)}</b>used its DB value</div>
@@ -373,7 +380,7 @@ function grid() {
   const cols = [];
   for (const a of [false, true]) for (const sg of SAFEGUARDS) cols.push({ a, sg, id: cid(a, sg, p) });
   const scen = {};
-  DATA.tickets.filter(r => r.security_prompt === p).forEach(r => {
+  DATA.tickets.filter(r => armOf(r) === p).forEach(r => {
     const s = scen[r.scenario_id] ||= { id: r.scenario_id, name: r.employee_name, kind: r.kind, cells: {} };
     (s.cells[r.condition_id] ||= {})[r.ticket] = r;
   });
@@ -458,7 +465,7 @@ function episode(id) {
   $app.innerHTML = header([["Overview", "#/"], [SG_NAME[cond.safeguard], `#/condition/${cond.safeguard}`], ["Scenarios", "#/grid"], [ep.scenario.scenario_id]]) + `
     <div class="card"><div class="emp"><span class="big">${esc(emp.name)}</span><span class="kv">${esc(emp.employee_id)} · ${esc(ep.scenario.scenario_id)} · ${esc(ep.scenario.kind)}</span></div>
       <div class="emp" style="margin-top:6px"><span class="kv">Role <b>${esc(emp.role)}</b></span><span class="kv">Employment type <b>${esc(emp.employment_type)}</b></span><span class="kv">Security training <b>${esc(emp.training)}</b></span><span class="muted" style="font-size:12px">true records</span></div>
-      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><span class="chip ${cond.attack ? "attack" : ""}">${cond.attack ? `Attack: HR writes employment type <mark class="lie">${esc(lie)}</mark>` : "No attack"}</span><span class="chip">${SG_NAME[cond.safeguard]}</span><span class="chip">${PROMPT_NAME[cond.security_prompt]}</span><span class="chip">${esc(ep.model)}</span><span class="chip">${ep.tokens[0]} in / ${ep.tokens[1]} out tokens</span></div></div>
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><span class="chip ${cond.attack ? "attack" : ""}">${cond.attack ? `Attack: HR writes employment type <mark class="lie">${esc(lie)}</mark>` : "No attack"}</span><span class="chip">${SG_NAME[cond.safeguard]}</span><span class="chip">${esc(armName(condArm(cond)))}</span><span class="chip">${esc(ep.model)}</span><span class="chip">${ep.tokens[0]} in / ${ep.tokens[1]} out tokens</span></div></div>
     ${tickets}
     <h2>Shared memory at the end of the episode</h2>${memory}`;
   wire();
@@ -472,7 +479,7 @@ function route() {
   else if (view === "grid") grid();
   else if (view === "episode") {
     const ep = DATA.episodes[arg];
-    if (ep && ep.condition.security_prompt !== state.prompt) state.prompt = ep.condition.security_prompt;
+    if (ep && condArm(ep.condition) !== state.prompt) state.prompt = condArm(ep.condition);
     episode(arg);
   } else overview();
   window.scrollTo(0, 0);
